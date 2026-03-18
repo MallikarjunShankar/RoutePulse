@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #00CFFF;
+  --color-accent: #c084fc;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-slate-950 text-slate-300 font-sans tracking-tight antialiased selection:bg-[#00CFFF]/30;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  @apply text-white font-medium;
+}
+
+/* Custom Scrollbar for a high-tech vibe */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-900;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-700 hover:bg-slate-600 rounded;
+}
+
+/* Leaflet dark mode overrides to blend in */
+.leaflet-container {
+  background: #020617 !important;
+  font-family: inherit !important;
+}
+
+.leaflet-control-zoom a {
+  background-color: #0f172a !important;
+  color: #94a3b8 !important;
+  border-color: #1e293b !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background-color: #1e293b !important;
+  color: #fff !important;
+}
