@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRouteStore } from '../../store/useRouteStore';
-import { optimizeRoute } from '../../services/api';
-import { MapPin, Search, Navigation, AlertCircle, Loader2, Info } from 'lucide-react';
+import { optimizeLastMile, optimizeRoute } from '../../services/api';
+import { MapPin, Search, Navigation, AlertCircle, Loader2, Info, LocateFixed } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -12,31 +12,94 @@ export function cn(...inputs) {
 }
 
 const ControlPanel = () => {
+  const [result, setResult] = useState(null);
+
   const { 
     userType, setUserType, 
-    destination, setDestination, 
+    userLocation, setUserLocation,
+    destinationCoords,
+    destination,
     routeData, isLoading, 
     setLoading, setRouteData, setError, error 
   } = useRouteStore();
 
+  const userTypeLabel = {
+    ambulance: 'Emergency',
+    delivery: 'Delivery',
+    visitor: 'Pedestrian'
+  };
+
+  const formatLngLat = (coords) => {
+    if (!Array.isArray(coords) || coords.length !== 2) return null;
+    const lng = Number(coords[0]);
+    const lat = Number(coords[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  };
+
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported in this browser.');
+      return;
+    }
+
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords = [position.coords.longitude, position.coords.latitude];
+        setUserLocation(coords);
+        console.log('User location set:', coords);
+      },
+      (geoError) => {
+        console.error(geoError);
+        setError('Unable to fetch your location. Please allow location access.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
   const handleOptimize = async () => {
-    if (!destination?.trim()) {
-      setError("Please select a destination.");
+    if (!destinationCoords) {
+      setError('Please click on the map to select destination.');
+      return;
+    }
+
+    if (!userLocation) {
+      setError('Please click "Use My Location" first.');
       return;
     }
     
     setLoading(true);
     setError(null);
-    setRouteData(null); // Clear old map line
+    setResult(null);
+
+    console.log({
+      userLocation,
+      destination: destinationCoords,
+      userType
+    });
     
-    console.log("Calling API for destination:", destination);
+    console.log('Calling API for destination:', destinationCoords);
     
     try {
+      // Backend expects [lat, lon]
+      const backendUserLocation = [userLocation[1], userLocation[0]];
+      const backendDestination = [destinationCoords[1], destinationCoords[0]];
+
+      const backendResult = await optimizeLastMile({
+        userLocation: backendUserLocation,
+        destination: backendDestination,
+        userType
+      });
+
+      console.log("Backend optimize-last-mile response:", backendResult);
+      setResult(backendResult);
+
       // Pass a fixed mock location representing user's origin
       const response = await optimizeRoute({ 
         userType, 
-        destination, 
-        location: { lat: 37.7700, lng: -122.4100 } 
+        destination: formatLngLat(destinationCoords) || destination,
+        location: { lat: userLocation[1], lng: userLocation[0] }
       });
       
       console.log("API returned response:", response);
@@ -45,14 +108,17 @@ const ControlPanel = () => {
         throw new Error("Invalid response from routing engine.");
       }
 
-      const lat = response.startLocation.lat;
-      const lng = response.startLocation.lng;
+      const startLat = Number(response.startLocation.lat);
+      const startLng = Number(response.startLocation.lng ?? response.startLocation.lon);
+      const destLat = Number(response.destinationLocation?.lat);
+      const destLng = Number(response.destinationLocation?.lng ?? response.destinationLocation?.lon);
 
-      if (lat === undefined || lng === undefined) {
+      if (!Number.isFinite(startLat) || !Number.isFinite(startLng) || !Number.isFinite(destLat) || !Number.isFinite(destLng)) {
+        console.error("Invalid coordinates received:", response);
         throw new Error("Invalid coordinates received.");
       }
 
-      console.log("Updating state with valid coordinates:", lat, lng);
+      console.log("Updating state with valid coordinates:", { startLat, startLng, destLat, destLng });
       setRouteData(response);
     } catch (err) {
       console.error(err);
@@ -78,18 +144,22 @@ const ControlPanel = () => {
             Unit Type
           </label>
           <div className="grid grid-cols-3 gap-2">
-            {['ambulance', 'delivery', 'visitor'].map(type => (
+            {[
+              { value: 'ambulance', label: 'Emergency' },
+              { value: 'delivery', label: 'Delivery' },
+              { value: 'visitor', label: 'Pedestrian' }
+            ].map((option) => (
               <button
-                key={type}
-                onClick={() => setUserType(type)}
+                key={option.value}
+                onClick={() => setUserType(option.value)}
                 className={cn(
                   "py-3 px-2 rounded-xl text-xs sm:text-sm font-medium capitalize border transition-all duration-300",
-                  userType === type 
+                  userType === option.value
                     ? "bg-[#00CFFF]/20 border-[#00CFFF] text-white shadow-[0_0_15px_rgba(0,207,255,0.2)]"
                     : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10"
                 )}
               >
-                {type}
+                {option.label}
               </button>
             ))}
           </div>
@@ -100,16 +170,27 @@ const ControlPanel = () => {
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
             Target Destination
           </label>
-          <div className="relative group">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-[#00CFFF]/70" size={18} />
-            <input 
-              type="text"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              placeholder="e.g. Memorial Hospital..."
-              className="w-full bg-[#020617] border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#00CFFF]/50 focus:ring-1 focus:ring-[#00CFFF]/50 transition-all"
-            />
+          <div className="bg-[#020617] border border-white/10 rounded-xl py-3 px-4 text-sm text-slate-400 flex items-center gap-2">
+            <MapPin size={16} className="text-slate-500" />
+            <span>Click on map to select destination</span>
           </div>
+          {destination && <p className="text-xs text-slate-500 mt-2">Selected: {destination}</p>}
+        </div>
+
+        <div>
+          <button
+            type="button"
+            onClick={handleUseMyLocation}
+            className="w-full rounded-xl bg-[#020617] border border-white/10 hover:border-[#00CFFF]/40 py-3 px-4 text-sm text-slate-200 transition-all flex items-center justify-center gap-2"
+          >
+            <LocateFixed size={16} className="text-[#00CFFF]" />
+            Use My Location
+          </button>
+          {userLocation && (
+            <p className="text-xs text-slate-500 mt-2">
+              Current: {formatLngLat(userLocation)}
+            </p>
+          )}
         </div>
       </div>
 
@@ -123,7 +204,7 @@ const ControlPanel = () => {
           <div className="absolute inset-0 bg-gradient-to-r from-[#00CFFF]/10 to-[#3b82f6]/10 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300" />
           <div className="py-4 flex items-center justify-center gap-2 font-semibold text-white relative z-10 transition-colors">
             {isLoading ? <Loader2 size={20} className="animate-spin text-[#00CFFF]" /> : <Search size={20} className="text-[#00CFFF] group-hover:animate-pulse" />}
-            {isLoading ? 'Calculating...' : 'Execute Route Optimization'}
+            {isLoading ? 'Calculating...' : 'Optimize Last Mile'}
           </div>
         </button>
       </div>
@@ -184,6 +265,49 @@ const ControlPanel = () => {
                         {alt.name}
                       </span>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {result && (
+                <div className="text-sm rounded-lg border border-[#00CFFF]/25 bg-[#00CFFF]/5 p-4 space-y-3">
+                  <p className="text-slate-300 text-xs uppercase tracking-wider font-semibold">Decision Panel</p>
+
+                  <div className="rounded-md border border-white/10 bg-[#020617]/70 p-3">
+                    <p className="text-xs text-slate-500">Best Entry</p>
+                    <p className="text-white font-semibold mt-0.5">
+                      {result.entry?.name || result.best_entry?.name || result.bestEntry || routeData?.bestEntry || 'N/A'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Why</p>
+                    <ul className="space-y-1 text-slate-200">
+                      <li>
+                        • Crowd level: {result.entry?.crowd_level || result.crowd_level || result.crowdLevel || result.status || 'N/A'}
+                      </li>
+                      <li>
+                        • Accessibility: {result.entry?.accessibility || result.accessibility || 'N/A'}
+                      </li>
+                      <li>
+                        • Optimized for: {result.user_type || result.userType || userTypeLabel[userType] || userType}
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-md border border-white/10 bg-[#020617]/70 p-2">
+                      <p className="text-slate-500">Distance</p>
+                      <p className="text-white font-medium">
+                        {typeof result.distance === 'number' ? `${Math.round(result.distance)}m` : result.distance || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-[#020617]/70 p-2">
+                      <p className="text-slate-500">User Type</p>
+                      <p className="text-white font-medium">
+                        {result.user_type || result.userType || userTypeLabel[userType] || userType}
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}

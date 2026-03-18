@@ -2,12 +2,16 @@ import { create } from 'zustand';
 
 export const useRouteStore = create((set) => ({
   userType: 'ambulance',
+  userLocation: null,
+  destinationCoords: null,
   destination: '',
   routeData: null,
   isLoading: false,
   error: null,
   
   setUserType: (type) => set({ userType: type }),
+  setUserLocation: (coords) => set({ userLocation: coords }),
+  setDestinationCoords: (coords) => set({ destinationCoords: coords }),
   setDestination: (dest) => set({ destination: dest }),
   
   setLoading: (loading) => set({ isLoading: loading }),
@@ -31,7 +35,7 @@ export const useRouteStore = create((set) => ({
     set({ routeData: data, error: null });
   },
   
-  setError: (err) => set({ error: err, routeData: null }),
+  setError: (err) => set({ error: err }),
   
   resetRoute: () => set({ routeData: null, error: null })
 }));

@@ -1,5 +1,7 @@
 // Simulated Mock API for Route Pulse
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+
 // Helpers to simulate network delay
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -17,6 +19,37 @@ const entryPoints = {
   visitor: [
     { id: 'V1', name: 'Main Lobby', lat: 37.7748, lng: -122.4198, congestion: 'high' }
   ]
+};
+
+const userTypeMap = {
+  ambulance: 'emergency',
+  delivery: 'delivery',
+  visitor: 'pedestrian'
+};
+
+export const optimizeLastMile = async ({ userLocation, destination, userType }) => {
+  const mappedUserType = userTypeMap[userType] || 'pedestrian';
+
+  const payload = {
+    user_location: userLocation,
+    destination,
+    user_type: mappedUserType
+  };
+
+  const response = await fetch(`${API_BASE_URL}/optimize-last-mile`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Failed to optimize last mile (${response.status})`);
+  }
+
+  return response.json();
 };
 
 export const optimizeRoute = async ({ userType, destination, location }) => {
