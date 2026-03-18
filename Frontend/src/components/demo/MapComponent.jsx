@@ -24,7 +24,17 @@ const createPulseIcon = (color) => {
 
 const mapStyleUrl = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 
-// Component to dynamically recenter map and animate lines
+// Component to dynamically recenter map
+function ChangeView({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center && center.lat !== undefined && center.lng !== undefined) {
+      map.setView([center.lat, center.lng], map.getZoom());
+    }
+  }, [center, map]);
+  return null;
+}
+
 const MapController = ({ routeData }) => {
   const map = useMap();
   
@@ -74,12 +84,25 @@ const AnimatedPolyline = ({ path, color }) => {
 };
 
 const MapComponent = () => {
-  const { routeData } = useRouteStore();
+  // Use selector to avoid unnecessary remounts when typing in search
+  const routeData = useRouteStore(state => state.routeData);
   
-  // Default SF view
-  const center = [37.7725, -122.4140];
-  const zoom = 14;
+  // Manage stable map center
+  const defaultCenter = { lat: 37.7725, lng: -122.4140 };
+  const [position, setPosition] = useState(defaultCenter);
 
+  useEffect(() => {
+    if (routeData && routeData.startLocation) {
+      setPosition(routeData.startLocation);
+    }
+  }, [routeData]);
+
+  // Defensive render
+  if (!position || position.lat === undefined || position.lng === undefined) {
+    return <div className="text-white flex items-center justify-center h-full">Loading map...</div>;
+  }
+
+  const zoom = 14;
   const nodeColor = '#00CFFF';
   const startColor = '#c084fc';
   
@@ -100,11 +123,12 @@ const MapComponent = () => {
   return (
     <div className="w-full h-full relative z-0">
       <MapContainer 
-        center={center} 
+        center={position} 
         zoom={zoom} 
         style={{ height: '100%', width: '100%', background: '#020617' }}
         zoomControl={false}
       >
+        <ChangeView center={position} />
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">Carto</a>'
           url={mapStyleUrl}

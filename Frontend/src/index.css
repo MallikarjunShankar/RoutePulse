@@ -9,6 +9,10 @@
   color-scheme: dark;
 }
 
+html, body, #root {
+  height: 100%;
+}
+
 body {
   @apply bg-slate-950 text-slate-300 font-sans tracking-tight antialiased selection:bg-[#00CFFF]/30;
 }

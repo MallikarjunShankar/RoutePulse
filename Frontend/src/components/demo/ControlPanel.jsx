@@ -28,6 +28,9 @@ const ControlPanel = () => {
     setLoading(true);
     setError(null);
     setRouteData(null); // Clear old map line
+    
+    console.log("Calling API for destination:", destination);
+    
     try {
       // Pass a fixed mock location representing user's origin
       const response = await optimizeRoute({ 
@@ -35,9 +38,25 @@ const ControlPanel = () => {
         destination, 
         location: { lat: 37.7700, lng: -122.4100 } 
       });
+      
+      console.log("API returned response:", response);
+
+      if (!response || !response.startLocation) {
+        throw new Error("Invalid response from routing engine.");
+      }
+
+      const lat = response.startLocation.lat;
+      const lng = response.startLocation.lng;
+
+      if (lat === undefined || lng === undefined) {
+        throw new Error("Invalid coordinates received.");
+      }
+
+      console.log("Updating state with valid coordinates:", lat, lng);
       setRouteData(response);
     } catch (err) {
-      setError("Failed to fetch optimized route.");
+      console.error(err);
+      setError(err.message || "Failed to fetch optimized route.");
     } finally {
       setLoading(false);
     }

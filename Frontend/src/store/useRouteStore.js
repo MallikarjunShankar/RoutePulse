@@ -11,7 +11,26 @@ export const useRouteStore = create((set) => ({
   setDestination: (dest) => set({ destination: dest }),
   
   setLoading: (loading) => set({ isLoading: loading }),
-  setRouteData: (data) => set({ routeData: data, error: null }),
+  
+  setRouteData: (data) => {
+    console.log("Before updating state with data:", data);
+    if (!data) {
+      set({ routeData: null, error: null });
+      return;
+    }
+    
+    // Validate path coordinates
+    if (data.path) {
+      const validPath = data.path.every(p => p && typeof p.lat === 'number' && typeof p.lng === 'number');
+      if (!validPath) {
+        set({ error: "Invalid path coordinates returned." });
+        return;
+      }
+    }
+    
+    set({ routeData: data, error: null });
+  },
+  
   setError: (err) => set({ error: err, routeData: null }),
   
   resetRoute: () => set({ routeData: null, error: null })
